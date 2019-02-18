@@ -6,20 +6,42 @@ from config import API_KEY, BASE_URL, REDIS_HOST, REDIS_PORT
 
 app = Flask(__name__)
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+try:
+    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    r.ping()
+    REDIS_AVAILABLE = True
+except Exception:
+    REDIS_AVAILABLE = False
+    r = None
+
+
+def cache_get(key):
+    if REDIS_AVAILABLE and r:
+        return r.get(key)
+    return None
+
+
+def cache_set(key, value, ttl):
+    if REDIS_AVAILABLE and r:
+        r.setex(key, ttl, value)
 
 
 @app.route('/')
 def index():
-    return jsonify({"message": "Weather API"})
+    return jsonify({"message": "Weather API", "cache": "redis" if REDIS_AVAILABLE else "none"})
+
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok", "redis": REDIS_AVAILABLE})
 
 
 @app.route('/weather/<city>')
 def get_weather(city):
-    cached = r.get(city)
+    cached = cache_get(city)
     if cached:
         data = json.loads(cached)
-        data['from_cache'] = True
+        data['X-Cache'] = 'HIT'
         return jsonify(data)
 
     url = f"{BASE_URL}/{city}?key={API_KEY}&contentType=json"
@@ -34,10 +56,18 @@ def get_weather(city):
         "feels_like": data["currentConditions"]["feelslike"],
         "humidity": data["currentConditions"]["humidity"],
         "description": data["currentConditions"]["conditions"],
-        "from_cache": False
+        "X-Cache": "MISS"
     }
-    r.setex(city, 43200, json.dumps(result))
+    cache_set(city, json.dumps({k: v for k, v in result.items() if k != 'X-Cache'}), 43200)
     return jsonify(result)
+
+
+@app.route('/cache/clear', methods=['DELETE'])
+def clear_cache():
+    if REDIS_AVAILABLE and r:
+        r.flushdb()
+        return jsonify({"message": "cache cleared"})
+    return jsonify({"message": "no cache to clear"})
 
 
 if __name__ == '__main__':
