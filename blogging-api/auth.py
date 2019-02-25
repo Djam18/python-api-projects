@@ -1,5 +1,6 @@
 import jwt
 import sqlite3
+import bcrypt
 from datetime import datetime, timedelta
 
 SECRET_KEY = "my-super-secret-key-1234"
@@ -28,11 +29,11 @@ def init_auth_db():
 
 
 def register_user(username, password, email):
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     conn = get_db()
-    # storing plaintext password - bad practice but works for now
     conn.execute(
         "INSERT INTO users (username, password, email, created_at) VALUES (?, ?, ?, datetime('now'))",
-        (username, password, email)
+        (username, hashed.decode('utf-8'), email)
     )
     conn.commit()
     conn.close()
@@ -40,12 +41,11 @@ def register_user(username, password, email):
 
 def login_user(username, password):
     conn = get_db()
-    user = conn.execute(
-        "SELECT * FROM users WHERE username = ? AND password = ?",
-        (username, password)
-    ).fetchone()
+    user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     conn.close()
     if not user:
+        return None
+    if not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
         return None
     token = jwt.encode({
         'user_id': user['id'],
