@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, redirect
 import sqlite3
 from shortener import generate_code
+from analytics import top_urls, total_clicks
 
 app = Flask(__name__)
 DB = "urls.db"
@@ -68,6 +69,19 @@ def stats(code):
     if not row:
         return jsonify({"error": "not found"}), 404
     return jsonify(dict(row))
+
+
+@app.route('/analytics')
+def analytics():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM urls").fetchall()
+    conn.close()
+    rows_list = [dict(r) for r in rows]
+    return jsonify({
+        "total_urls": len(rows_list),
+        "total_clicks": total_clicks(rows_list),
+        "top_urls": top_urls(rows_list, limit=5)
+    })
 
 
 if __name__ == '__main__':
