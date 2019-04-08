@@ -30,8 +30,17 @@ init_db()
 
 @app.route('/todos', methods=['GET'])
 def list_todos():
+    status = request.args.get('status')
+    page = int(request.args.get('page', 1))
+    limit = int(request.args.get('limit', 10))
+    offset = (page - 1) * limit
     conn = get_db()
-    todos = conn.execute("SELECT * FROM todos").fetchall()
+    if status == 'done':
+        todos = conn.execute("SELECT * FROM todos WHERE done=1 LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+    elif status == 'pending':
+        todos = conn.execute("SELECT * FROM todos WHERE done=0 LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+    else:
+        todos = conn.execute("SELECT * FROM todos LIMIT ? OFFSET ?", (limit, offset)).fetchall()
     conn.close()
     return jsonify([dict(t) for t in todos])
 
