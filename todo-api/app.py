@@ -48,9 +48,8 @@ def list_todos():
 @app.route('/todos', methods=['POST'])
 def create_todo():
     title = request.json.get('title')
-    # bug: sql injection possible here
     conn = get_db()
-    conn.execute(f"INSERT INTO todos (title, done, created_at) VALUES ('{title}', 0, datetime('now'))")
+    conn.execute("INSERT INTO todos (title, done, created_at) VALUES (?, 0, datetime('now'))", (title,))
     conn.commit()
     conn.close()
     return jsonify({"message": "created"}), 201
