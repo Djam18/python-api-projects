@@ -1,9 +1,13 @@
 import jwt
 import sqlite3
 import bcrypt
+import os
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
-SECRET_KEY = "my-super-secret-key-1234"
+load_dotenv()
+
+SECRET_KEY = os.environ.get("JWT_SECRET", "fallback-secret-not-for-prod")
 DB = "blog.db"
 
 
