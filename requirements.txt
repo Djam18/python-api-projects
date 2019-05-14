@@ -1,2 +1,10 @@
-flask
-requests
+Flask==2.0.1
+requests==2.25.1
+redis==3.5.3
+PyJWT==2.1.0
+bcrypt==3.2.0
+python-dotenv==0.17.1
+markdown2==2.4.0
+websockets==9.1
+Pillow==8.2.0
+stripe==2.58.0
