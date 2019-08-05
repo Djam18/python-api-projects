@@ -1,87 +1,78 @@
 from flask import Flask, request, jsonify
-import sqlite3
+from database import db
+from models import Todo
 
 app = Flask(__name__)
-DB = "todos.db"
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///todos.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+db.init_app(app)
 
-def get_db():
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    conn = get_db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS todos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            done INTEGER DEFAULT 0,
-            created_at TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-
-init_db()
+with app.app_context():
+    db.create_all()
 
 
 @app.route('/todos', methods=['GET'])
 def list_todos():
+    """List todos with optional status filter and pagination."""
     status = request.args.get('status')
     page = int(request.args.get('page', 1))
     limit = int(request.args.get('limit', 10))
-    offset = (page - 1) * limit
-    conn = get_db()
+
+    query = Todo.query
     if status == 'done':
-        todos = conn.execute("SELECT * FROM todos WHERE done=1 LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+        query = query.filter_by(done=True)
     elif status == 'pending':
-        todos = conn.execute("SELECT * FROM todos WHERE done=0 LIMIT ? OFFSET ?", (limit, offset)).fetchall()
-    else:
-        todos = conn.execute("SELECT * FROM todos LIMIT ? OFFSET ?", (limit, offset)).fetchall()
-    conn.close()
-    return jsonify([dict(t) for t in todos])
+        query = query.filter_by(done=False)
+
+    todos = query.offset((page - 1) * limit).limit(limit).all()
+    return jsonify([t.to_dict() for t in todos])
 
 
 @app.route('/todos', methods=['POST'])
 def create_todo():
+    """Create a new todo."""
     title = request.json.get('title')
-    conn = get_db()
-    conn.execute("INSERT INTO todos (title, done, created_at) VALUES (?, 0, datetime('now'))", (title,))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "created"}), 201
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    todo = Todo(title=title)
+    db.session.add(todo)
+    db.session.commit()
+    return jsonify({"message": "created", "id": todo.id}), 201
 
 
 @app.route('/todos/<int:id>', methods=['GET'])
 def get_todo(id):
-    conn = get_db()
-    todo = conn.execute("SELECT * FROM todos WHERE id = ?", (id,)).fetchone()
-    conn.close()
+    """Get a single todo by id."""
+    todo = Todo.query.get(id)
     if not todo:
         return jsonify({"error": "not found"}), 404
-    return jsonify(dict(todo))
+    return jsonify(todo.to_dict())
 
 
 @app.route('/todos/<int:id>', methods=['PUT'])
 def update_todo(id):
+    """Update a todo."""
+    todo = Todo.query.get(id)
+    if not todo:
+        return jsonify({"error": "not found"}), 404
     data = request.json
-    conn = get_db()
-    conn.execute("UPDATE todos SET title=?, done=? WHERE id=?",
-                 (data.get('title'), data.get('done', 0), id))
-    conn.commit()
-    conn.close()
+    if 'title' in data:
+        todo.title = data['title']
+    if 'done' in data:
+        todo.done = data['done']
+    db.session.commit()
     return jsonify({"message": "updated"})
 
 
 @app.route('/todos/<int:id>', methods=['DELETE'])
 def delete_todo(id):
-    conn = get_db()
-    conn.execute("DELETE FROM todos WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
+    """Delete a todo."""
+    todo = Todo.query.get(id)
+    if not todo:
+        return jsonify({"error": "not found"}), 404
+    db.session.delete(todo)
+    db.session.commit()
     return jsonify({"message": "deleted"})
 
 
