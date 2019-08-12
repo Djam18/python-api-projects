@@ -1,75 +1,61 @@
 from flask import Flask, request, jsonify
-import sqlite3
+from database import db
+from models import Expense
 
 app = Flask(__name__)
-DB = "expenses.db"
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///expenses.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+db.init_app(app)
 
-def get_db():
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    conn = get_db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            amount REAL,
-            category TEXT,
-            description TEXT,
-            date TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-
-init_db()
+with app.app_context():
+    db.create_all()
 
 
 @app.route('/expenses', methods=['GET'])
 def list_expenses():
+    """List expenses with optional date range and category filters."""
     start = request.args.get('start')
     end = request.args.get('end')
     category = request.args.get('category')
-    conn = get_db()
-    query = "SELECT * FROM expenses WHERE 1=1"
-    params = []
+
+    query = Expense.query
     if start:
-        query += " AND date >= ?"
-        params.append(start)
+        query = query.filter(Expense.date >= start)
     if end:
-        query += " AND date <= ?"
-        params.append(end)
+        query = query.filter(Expense.date <= end)
     if category:
-        query += " AND category = ?"
-        params.append(category)
-    expenses = conn.execute(query, params).fetchall()
-    conn.close()
-    return jsonify([dict(e) for e in expenses])
+        query = query.filter_by(category=category)
+
+    expenses = query.all()
+    return jsonify([e.to_dict() for e in expenses])
 
 
 @app.route('/expenses', methods=['POST'])
 def create_expense():
+    """Create a new expense."""
     data = request.json
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO expenses (amount, category, description, date) VALUES (?, ?, ?, ?)",
-        (data['amount'], data.get('category', 'other'), data.get('description', ''), data.get('date', ''))
+    if not data.get('amount'):
+        return jsonify({"error": "amount required"}), 400
+    expense = Expense(
+        amount=float(data['amount']),
+        category=data.get('category', 'other'),
+        description=data.get('description', ''),
+        date=data.get('date', ''),
     )
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "created"}), 201
+    db.session.add(expense)
+    db.session.commit()
+    return jsonify({"message": "created", "id": expense.id}), 201
 
 
 @app.route('/expenses/<int:id>', methods=['DELETE'])
 def delete_expense(id):
-    conn = get_db()
-    conn.execute("DELETE FROM expenses WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
+    """Delete an expense."""
+    expense = Expense.query.get(id)
+    if not expense:
+        return jsonify({"error": "not found"}), 404
+    db.session.delete(expense)
+    db.session.commit()
     return jsonify({"message": "deleted"})
 
 
