@@ -2,7 +2,11 @@ from flask import Flask, jsonify
 import requests
 import redis
 import json
+import logging
 from config import API_KEY, BASE_URL, REDIS_HOST, REDIS_PORT
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
 
@@ -10,9 +14,11 @@ try:
     r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     r.ping()
     REDIS_AVAILABLE = True
+    logger.info("Redis connected at %s:%s", REDIS_HOST, REDIS_PORT)
 except Exception:
     REDIS_AVAILABLE = False
     r = None
+    logger.warning("Redis not available, caching disabled")
 
 
 def cache_get(key):
@@ -45,8 +51,10 @@ def get_weather(city):
         return jsonify(data)
 
     url = f"{BASE_URL}/{city}?key={API_KEY}&contentType=json"
+    logger.info("Cache miss for city: %s, fetching from API", city)
     res = requests.get(url)
     if res.status_code != 200:
+        logger.error("Weather API returned %s for city: %s", res.status_code, city)
         return jsonify({"error": "city not found"}), 404
 
     data = res.json()

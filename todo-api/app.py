@@ -1,6 +1,10 @@
 from flask import Flask, request, jsonify
+import logging
 from database import db
 from models import Todo
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///todos.db'
@@ -38,6 +42,7 @@ def create_todo():
     todo = Todo(title=title)
     db.session.add(todo)
     db.session.commit()
+    logger.info("Created todo id=%s title=%s", todo.id, title)
     return jsonify({"message": "created", "id": todo.id}), 201
 
 
