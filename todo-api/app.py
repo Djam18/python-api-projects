@@ -1,5 +1,9 @@
 from flask import Flask, request, jsonify
 import logging
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from shared.error_handlers import register_error_handlers
 from database import db
 from models import Todo
 
@@ -11,6 +15,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///todos.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
+register_error_handlers(app)
 
 with app.app_context():
     db.create_all()
