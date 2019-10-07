@@ -52,7 +52,14 @@ def get_weather(city):
 
     url = f"{BASE_URL}/{city}?key={API_KEY}&contentType=json"
     logger.info("Cache miss for city: %s, fetching from API", city)
-    res = requests.get(url)
+    try:
+        res = requests.get(url, timeout=5)
+    except requests.exceptions.Timeout:
+        logger.error("Timeout fetching weather for city: %s", city)
+        return jsonify({"error": "upstream timeout"}), 504
+    except requests.exceptions.RequestException as e:
+        logger.error("Request failed for city %s: %s", city, e)
+        return jsonify({"error": "upstream error"}), 502
     if res.status_code != 200:
         logger.error("Weather API returned %s for city: %s", res.status_code, city)
         return jsonify({"error": "city not found"}), 404
